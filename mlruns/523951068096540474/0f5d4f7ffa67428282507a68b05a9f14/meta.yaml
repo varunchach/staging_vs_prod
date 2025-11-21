@@ -1,0 +1,14 @@
+artifact_uri: file:C:\Users\Satej Raste\Downloads\Staging_Prod\staging_vs_prod\mlruns/523951068096540474/0f5d4f7ffa67428282507a68b05a9f14/artifacts
+end_time: 1763729430464
+entry_point_name: ''
+experiment_id: '523951068096540474'
+lifecycle_stage: active
+run_id: 0f5d4f7ffa67428282507a68b05a9f14
+run_name: diabetes_staging
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763729430324
+status: 4
+tags: []
+user_id: Satej Raste

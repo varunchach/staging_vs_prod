@@ -28,6 +28,8 @@ def train_and_log(stage: str = "staging") -> None:
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
+    X_train = X_train[:, :-2]  # a bug
+    X_test = X_test[:, :-2]  # a bug
 
     # 3. Configure MLflow
     # Use a local folder in both local & CI runs

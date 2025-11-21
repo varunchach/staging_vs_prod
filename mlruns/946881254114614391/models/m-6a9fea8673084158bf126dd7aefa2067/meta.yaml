@@ -1,0 +1,10 @@
+artifact_location: file:///C:/Users/Satej%20Raste/Downloads/Staging_Prod/staging_vs_prod/mlruns/946881254114614391/models/m-6a9fea8673084158bf126dd7aefa2067/artifacts
+creation_timestamp: 1763730443889
+experiment_id: '946881254114614391'
+last_updated_timestamp: 1763730451973
+model_id: m-6a9fea8673084158bf126dd7aefa2067
+model_type: null
+name: model
+source_run_id: b50c0bfc5dda433695acef7833f8cda5
+status: 2
+status_message: null

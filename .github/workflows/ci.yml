@@ -26,3 +26,27 @@ jobs:
       - name: Run staging training (smoke test)
         run: |
           python src/train_diabetes.py --stage=staging
+
+  run-production-training:
+    # ✅ Only start if staging job finished successfully
+    needs: run-staging-training
+    if: needs.run-staging-training.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run production training (only if staging passed)
+        run: |
+          python src/train_diabetes.py --stage=production

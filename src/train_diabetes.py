@@ -1,13 +1,16 @@
 import argparse
 import os
+import sys
 
 import joblib
 import mlflow
-import mlflow.sklearn
 from sklearn.datasets import load_diabetes
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
+
+# 👉 simple quality threshold for demo
+STAGING_MSE_THRESHOLD = 3000  # change this to be stricter/looser
 
 
 def train_and_log(stage: str = "staging") -> None:
@@ -17,68 +20,65 @@ def train_and_log(stage: str = "staging") -> None:
 
     stage: "staging" or "production"
     """
-    # ----------------------------------------
-    # 🔧 0. Set safe MLflow tracking directory (cross-platform)
-    # ----------------------------------------
-    # This ensures MLflow writes to ./mlruns on BOTH Windows & GitHub Actions (Linux)
-    file_dir = os.path.dirname(os.path.abspath(__file__))       # .../src
-    mlruns_dir = os.path.abspath(os.path.join(file_dir, "..", "mlruns"))
 
-    os.makedirs(mlruns_dir, exist_ok=True)
-    mlflow.set_tracking_uri(f"file:{mlruns_dir}")
-
-    # ----------------------------------------
     # 1. Load data
-    # ----------------------------------------
     diabetes = load_diabetes()
     X, y = diabetes.data, diabetes.target
 
-    # ----------------------------------------
-    # 2. Train-test split (same for staging & production)
-    # ----------------------------------------
+    # 2. Train-test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    X_train = X_train[:, :-2]
-    X_test = X_test[:, :-2]
 
-    # ----------------------------------------
     # 3. Start MLflow run
-    # ----------------------------------------
-    mlflow.set_experiment("diabetes_staging_vs_prod")
+    mlflow.set_experiment("diabetes_demo")
     with mlflow.start_run(run_name=f"diabetes_{stage}"):
         mlflow.log_param("stage", stage)
         mlflow.log_param("model_type", "LinearRegression")
 
-        # ----------------------------------------
-        # 4. Train Model
-        # ----------------------------------------
+        # 4. Train model
         model = LinearRegression()
         model.fit(X_train, y_train)
 
-        # ----------------------------------------
         # 5. Evaluate
-        # ----------------------------------------
         y_pred = model.predict(X_test)
         mse = mean_squared_error(y_test, y_pred)
         mlflow.log_metric("mse", mse)
 
         print(f"[{stage.upper()}] MSE: {mse:.2f}")
 
-        # ----------------------------------------
-        # 6. Log model in MLflow artifacts
-        # ----------------------------------------
+        # 6. SIMPLE QUALITY GATE FOR STAGING
+        if stage == "staging":
+            print(
+                f"[STAGING] Checking quality gate: "
+                f"MSE <= {STAGING_MSE_THRESHOLD}"
+            )
+            if mse > STAGING_MSE_THRESHOLD:
+                print(
+                    f"[STAGING] ❌ Model FAILED quality gate "
+                    f"(MSE={mse:.2f} > {STAGING_MSE_THRESHOLD})"
+                )
+                # 🔴 IMPORTANT: non-zero exit → GitHub Action step fails
+                sys.exit(1)
+            else:
+                print(
+                    f"[STAGING] ✅ Model PASSED quality gate "
+                    f"(MSE={mse:.2f} ≤ {STAGING_MSE_THRESHOLD})"
+                )
+
+        elif stage == "production":
+            print(
+                "[PRODUCTION] Skipping quality gate here "
+                "(we assume staging already checked it)."
+            )
+
+        # 7. Log model to MLflow
         mlflow.sklearn.log_model(model, artifact_path="model")
 
-        # ----------------------------------------
-        # 7. Save local Production/Staging model
-        # ----------------------------------------
-        models_dir = os.path.abspath(os.path.join(file_dir, "..", "models"))
-        os.makedirs(models_dir, exist_ok=True)
-
-        model_path = os.path.join(models_dir, f"diabetes_{stage}_model.pkl")
+        # 8. Save model to local 'models/' folder
+        os.makedirs("models", exist_ok=True)
+        model_path = os.path.join("models", f"diabetes_{stage}_model.pkl")
         joblib.dump(model, model_path)
-
         print(f"[{stage.upper()}] Saved model to: {model_path}")
 
 

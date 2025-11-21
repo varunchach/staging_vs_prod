@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 
 import joblib
 import mlflow
@@ -9,8 +8,8 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 
-# 👉 simple quality threshold for demo
-STAGING_MSE_THRESHOLD = 3000  # change this to be stricter/looser
+# Simple quality gate threshold for staging
+MSE_THRESHOLD = 3000.0
 
 
 def train_and_log(stage: str = "staging") -> None:
@@ -25,13 +24,19 @@ def train_and_log(stage: str = "staging") -> None:
     diabetes = load_diabetes()
     X, y = diabetes.data, diabetes.target
 
-    # 2. Train-test split
+    # 2. Train-test split (same for both stages, to keep things simple)
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
 
-    # 3. Start MLflow run
+    # 3. Configure MLflow
+    # Use a local folder in both local & CI runs
+    mlflow.set_tracking_uri("file:./mlruns")
     mlflow.set_experiment("diabetes_demo")
+
+    # Detect if we are running inside GitHub Actions
+    is_ci = os.getenv("GITHUB_ACTIONS", "false").lower() == "true"
+
     with mlflow.start_run(run_name=f"diabetes_{stage}"):
         mlflow.log_param("stage", stage)
         mlflow.log_param("model_type", "LinearRegression")
@@ -47,35 +52,38 @@ def train_and_log(stage: str = "staging") -> None:
 
         print(f"[{stage.upper()}] MSE: {mse:.2f}")
 
-        # 6. SIMPLE QUALITY GATE FOR STAGING
+        # 6A. Apply quality gate in STAGING
         if stage == "staging":
-            print(
-                f"[STAGING] Checking quality gate: "
-                f"MSE <= {STAGING_MSE_THRESHOLD}"
-            )
-            if mse > STAGING_MSE_THRESHOLD:
-                print(
-                    f"[STAGING] ❌ Model FAILED quality gate "
-                    f"(MSE={mse:.2f} > {STAGING_MSE_THRESHOLD})"
-                )
-                # 🔴 IMPORTANT: non-zero exit → GitHub Action step fails
-                sys.exit(1)
-            else:
+            if mse <= MSE_THRESHOLD:
                 print(
                     f"[STAGING] ✅ Model PASSED quality gate "
-                    f"(MSE={mse:.2f} ≤ {STAGING_MSE_THRESHOLD})"
+                    f"(MSE={mse:.2f} ≤ {MSE_THRESHOLD})"
                 )
+            else:
+                print(
+                    f"[STAGING] ❌ Model FAILED quality gate "
+                    f"(MSE={mse:.2f} > {MSE_THRESHOLD})"
+                )
+                # Fail the CI job if staging is bad
+                raise SystemExit(1)
 
-        elif stage == "production":
+        # 6B. Just informational print in PRODUCTION
+        if stage == "production":
+            print(f"[PRODUCTION] Using model with MSE={mse:.2f}")
+
+        # 7. Log model to MLflow ONLY when running locally
+        if not is_ci:
+            # This is for local demo in MLflow UI
+            mlflow.sklearn.log_model(model, artifact_path="model")
+            print("[INFO] Logged model to MLflow (local run).")
+        else:
+            # In CI, skip this to avoid weird filesystem issues like '/C:' on Linux
             print(
-                "[PRODUCTION] Skipping quality gate here "
-                "(we assume staging already checked it)."
+                "[INFO] Running inside GitHub Actions – skipping mlflow.sklearn.log_model "
+                "to avoid artifact permission issues."
             )
 
-        # 7. Log model to MLflow
-        mlflow.sklearn.log_model(model, artifact_path="model")
-
-        # 8. Save model to local 'models/' folder
+        # 8. Save model to local 'models/' folder (works both local & CI)
         os.makedirs("models", exist_ok=True)
         model_path = os.path.join("models", f"diabetes_{stage}_model.pkl")
         joblib.dump(model, model_path)
